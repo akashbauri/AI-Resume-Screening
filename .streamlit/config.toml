@@ -1,0 +1,12 @@
+# This section changes the colors and look of our web app
+[theme]
+primaryColor = "#2563EB"          # A professional corporate blue color for buttons and links
+backgroundColor = "#FFFFFF"       # A clean white canvas background color
+secondaryBackgroundColor = "#F3F4F6" # A soft light gray color for sidebars and text input areas
+textColor = "#1F2937"             # A dark slate gray color for text so it is easy to read
+font = "sans serif"               # A clean, modern modern font family shape style
+
+# This section optimizes how the server serves our app files
+[server]
+headless = true                   # Runs the app silently in the background without launching a browser manually
+enableCORS = false                # Disables cross-origin security restrictions so the app runs smoothly in the cloud
