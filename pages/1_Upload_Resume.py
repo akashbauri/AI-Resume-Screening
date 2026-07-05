@@ -8,7 +8,11 @@ from datetime import datetime
 from services.resume_parser import extract_resume_text
 from services.llm_service import parse_resume as parse_resume_with_ai
 from services.matcher import run_resume_match as match_candidate
-from services.database import save_candidate, load_candidates
+from services.database import (
+    save_candidate,
+    load_candidates,
+    candidate_exists,
+)
 from services.logger import log_event
 
 # Define the maximum file size allowed: 10 Megabytes
@@ -182,7 +186,19 @@ if analyze_button:
                 "Updated Time": timestamp_now
             }
             
-            # Commit the consolidated record entry safely into our JSON database file structure
+            # Check whether the candidate already exists
+            candidate_email = consolidated_candidate_record.get("Email", "").strip()
+
+            if candidate_exists(candidate_email):
+                st.warning("⚠️ Candidate already exists. Updating the existing profile...")
+                log_event(
+                    category="DATABASE",
+                    message=f"Duplicate candidate detected: {candidate_email}. Updating record."
+                )
+            else:
+                st.success("✅ New candidate detected. Saving profile...")
+                
+            # Save or update the candidate safely into our JSON database file structure
             save_candidate(consolidated_candidate_record)
             
             status_text.text("Completed")
