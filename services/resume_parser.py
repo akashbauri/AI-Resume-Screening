@@ -1,9 +1,13 @@
-# Import the tools we need to check files, read text, and handle formats
+# Import the tools we need to check files, read text, handle formats, and trace execution logs
 import os
+import logging
 import fitz  # This is PyMuPDF, used to open and extract text from PDF files
 import docx  # This is python-docx, used to open and extract text from Word files
 
-def extract_text_from_pdf(file_path):
+# Configure standard logging for this service instead of print statements
+logger = logging.getLogger(__name__)
+
+def extract_text_from_pdf(file_path: str) -> str:
     """
     This function opens a PDF file, loops through every single page, 
     and collects all the text inside it.
@@ -11,6 +15,7 @@ def extract_text_from_pdf(file_path):
     If the file is corrupt or cannot be opened, it raises an exception 
     so the system knows exactly what went wrong.
     """
+    logger.info(f"Starting PDF text extraction for: {file_path}")
     text = ""
     try:
         # Open the PDF document using PyMuPDF
@@ -25,18 +30,20 @@ def extract_text_from_pdf(file_path):
         doc.close()
         
     except Exception as e:
+        logger.error(f"Failed to read PDF file at {file_path}. Error: {str(e)}")
         # If the file is broken, pass the exact error up to the main program
         raise RuntimeError(f"Failed to read PDF file at {file_path}. Error: {str(e)}")
         
     return text
 
-def extract_text_from_docx(file_path):
+def extract_text_from_docx(file_path: str) -> str:
     """
     This function opens a Microsoft Word (.docx) file, reads every paragraph 
     line by line, and pieces the text back together.
     
     If it fails to open, it raises an exception.
     """
+    logger.info(f"Starting DOCX text extraction for: {file_path}")
     text = ""
     try:
         # Open the Word document using python-docx
@@ -48,12 +55,26 @@ def extract_text_from_docx(file_path):
             text += paragraph.text + "\n"
             
     except Exception as e:
+        logger.error(f"Failed to read DOCX file at {file_path}. Error: {str(e)}")
         # Pass the file reading error back up to the main program execution
         raise RuntimeError(f"Failed to read DOCX file at {file_path}. Error: {str(e)}")
         
     return text
 
-def normalize_and_clean_text(raw_text):
+def extract_text_from_txt(file_path: str) -> str:
+    """
+    This function opens a plain text (.txt) file using UTF-8 encoding 
+    and pulls out the entire textual content stream raw.
+    """
+    logger.info(f"Starting TXT text extraction for: {file_path}")
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
+    except Exception as e:
+        logger.error(f"Failed to read TXT file at {file_path}. Error: {str(e)}")
+        raise RuntimeError(f"Failed to read TXT file at {file_path}. Error: {str(e)}")
+
+def normalize_and_clean_text(raw_text: str) -> str:
     """
     This helper function takes messy text, strips out annoying blank lines, 
     and normalizes whitespace so everything is neatly spaced out with 
@@ -75,19 +96,20 @@ def normalize_and_clean_text(raw_text):
     # Join all the clean, normalized lines together using a clear line break separating them
     return "\n".join(clean_lines)
 
-def parse_resume(file_path):
+def extract_resume_text(file_path: str) -> str:
     """
     This is the main structural parsing engine wrapper function.
     Give it a file path, and it will check the type, run the extractor, 
-    and return perfectly normalized, plain clean text.
+    validate content fullness, and return perfectly normalized, plain clean text.
     
     It DOES NOT make any AI calls. It only handles pure file-to-text parsing.
     """
     # 1. Verification Check: Make sure the file actually exists on the computer disk
     if not os.path.exists(file_path):
+        logger.error(f"File lookup failed. Path does not exist: '{file_path}'")
         raise FileNotFoundError(f"The resume file was not found at path: '{file_path}'")
         
-    # 2. Extract the file extension string (like .pdf or .docx) in lowercase letters
+    # 2. Extract the file extension string (like .pdf, .docx, or .txt) in lowercase letters
     _, file_extension = os.path.splitext(file_path.lower())
     
     raw_extracted_text = ""
@@ -99,12 +121,23 @@ def parse_resume(file_path):
     elif file_extension == ".docx":
         raw_extracted_text = extract_text_from_docx(file_path)
         
+    elif file_extension == ".txt":
+        raw_extracted_text = extract_text_from_txt(file_path)
+        
     else:
-        # If the user tries to feed the engine an image or an excel file, reject it immediately
-        raise ValueError(f"Unsupported file format extension: '{file_extension}'. We only support .pdf and .docx files.")
+        # If the user tries to feed the engine an unsupported format, reject it immediately
+        logger.error(f"Rejected parsing attempt for unsupported file extension: '{file_extension}'")
+        raise ValueError(f"Unsupported file format extension: '{file_extension}'. We only support .pdf, .docx, and .txt files.")
         
     # 4. Filter the extracted text to clean up empty spaces, gaps, and blank rows
     final_plain_text = normalize_and_clean_text(raw_extracted_text)
     
-    # 5. Return the clean plain text string back to the workflow runner
+    # 5. Empty File Check: Prevent passing un-parsable data payloads upstream to the LLM core services
+    if not final_plain_text.strip():
+        logger.error(f"Zero text extracted from document context source: '{file_path}'")
+        raise ValueError("No readable text could be extracted from the uploaded file.")
+        
+    logger.info(f"Successfully finished text extraction step for file: '{file_path}'")
+    
+    # 6. Return the clean plain text string back to the workflow runner
     return final_plain_text
