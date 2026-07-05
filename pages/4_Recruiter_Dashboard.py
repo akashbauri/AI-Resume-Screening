@@ -1,7 +1,9 @@
 # Import our web interface components and the updated database service functions
 import streamlit as st
+import json
 from datetime import datetime
 from services.database import load_candidates, update_candidate
+from services.interview_generator import generate_interview_questions
 
 # Set page configuration layout to wide for a clear side-by-side split action board
 # This MUST be the first Streamlit command executed in the script file.
@@ -215,3 +217,68 @@ else:
                     st.rerun()
                 else:
                     st.error("❌ An issue occurred while attempting to write updates down onto the JSON storage engine layer.")
+
+        # ==========================================
+        # 🤖 AI INTERVIEW QUESTION GENERATOR
+        # ==========================================
+        st.markdown("---")
+        st.subheader("🤖 AI Interview Question Generator")
+        
+        # Track persistent session question variables relative to the active selection hash key
+        state_key = f"interview_questions_{candidate_email}"
+        
+        if st.button("🚀 Generate AI Interview Questions", use_container_width=True):
+            with st.spinner("Generating AI Interview Questions..."):
+                job_desc = chosen_candidate.get("Job Description", "")
+                result = generate_interview_questions(chosen_candidate, job_desc)
+                
+                if result.get("error"):
+                    st.error(result["error"])
+                else:
+                    st.session_state[state_key] = result
+
+        # Render questions array details layout if loaded in state
+        if state_key in st.session_state and st.session_state[state_key]:
+            questions_data = st.session_state[state_key]
+            
+            # --- DOWNLOAD INTERVIEW QUESTIONS AS JSON ---
+            st.download_button(
+                label="📄 Download Interview Questions",
+                data=json.dumps(questions_data, indent=4),
+                file_name=f"interview_questions_{candidate_email.split('@')[0]}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+            st.write("") # Micro spacer
+            
+            with st.expander("📌 Technical Questions", expanded=True):
+                tech_qs = questions_data.get("Technical Questions", [])
+                if tech_qs:
+                    for idx, q in enumerate(tech_qs, 1):
+                        st.markdown(f"{idx}. {q}")
+                else:
+                    st.caption("No technical questions generated.")
+
+            with st.expander("🧠 Behavioral Questions", expanded=False):
+                beh_qs = questions_data.get("Behavioral Questions", [])
+                if beh_qs:
+                    for idx, q in enumerate(beh_qs, 1):
+                        st.markdown(f"{idx}. {q}")
+                else:
+                    st.caption("No behavioral questions generated.")
+
+            with st.expander("💼 Project Questions", expanded=False):
+                proj_qs = questions_data.get("Project Questions", [])
+                if proj_qs:
+                    for idx, q in enumerate(proj_qs, 1):
+                        st.markdown(f"{idx}. {q}")
+                else:
+                    st.caption("No project questions generated.")
+
+            with st.expander("👥 HR Questions", expanded=False):
+                hr_qs = questions_data.get("HR Questions", [])
+                if hr_qs:
+                    for idx, q in enumerate(hr_qs, 1):
+                        st.markdown(f"{idx}. {q}")
+                else:
+                    st.caption("No HR questions generated.")
