@@ -1,96 +1,106 @@
-# Import the official Groq tool to communicate with the AI servers
-from groq import Groq
-# Import streamlit to securely read the API key from Streamlit Cloud Secrets
-import streamlit as st
+# Import the tools we need to handle structured JSON data and logging
 import json
+import logging
+from typing import dict, Any
 
-def get_groq_client():
-    """
-    This function initializes and returns the Groq client.
-    It fetches the secret key safely from Streamlit Secrets.
-    """
-    if "GROQ_API_KEY" not in st.secrets:
-        raise ValueError("Missing GROQ_API_KEY! Please add it to your Streamlit App Secrets.")
-    return Groq(api_key=st.secrets["GROQ_API_KEY"])
+# 3. Import call_llm from services.llm_service
+from services.llm_service import call_llm
 
-def run_resume_match(resume_json, job_description_text):
+# 4. Import MATCHER_PROMPT from prompts.matcher_prompt
+from prompts.matcher_prompt import MATCHER_PROMPT
+
+# Configure standard logging for this service instead of print statements
+logger = logging.getLogger(__name__)
+
+def run_resume_match(resume_json: dict, job_description_text: str) -> dict:
     """
-    This function takes parsed resume JSON data and compares it against 
-    the raw Job Description text using the Groq AI engine.
+    Compares the candidate's structured Resume JSON against the raw Job Description text.
+    It builds a formatted prompt, runs it through the central LLM engine service, cleans
+    and converts the output into structured Python JSON, and applies robust backend validation.
     
-    It outputs a beautifully structured Python dictionary with scores, skills gap breakdown, 
-    and evaluation metrics without returning any markdown formatting.
+    Args:
+        resume_json (dict): Parsed resume attributes from the applicant profile.
+        job_description_text (str): Raw requirements context provided by the hiring manager.
+        
+    Returns:
+        dict: Verified evaluation assessment details map containing metrics, text blocks, and arrays.
     """
-    # Convert the incoming resume JSON dictionary into a clean text string for the prompt
-    resume_string = json.dumps(resume_json, indent=2)
-
-    # Define the precise instructions telling the AI to calculate the match details
-    prompt = f"""
-    You are an expert technical recruiter. Compare the candidate's structured Resume JSON against the provided Job Description (JD).
-    Analyze both profiles and generate a detailed matching assessment matching the exact JSON schema below.
-    
-    Do not include any chat, greetings, explanation, or markdown code block formatting (such as ```json). 
-    Return ONLY the raw JSON object string.
-
-    The JSON structure MUST look exactly like this:
-    {{
-        "Match Score": 0,
-        "Matching Skills": [],
-        "Missing Skills": [],
-        "Relevant Experience": "",
-        "Potential Concerns": [],
-        "AI Summary": "",
-        "Recommendation": ""
-    }}
-
-    Rules for fields:
-    1. "Match Score": An integer value between 0 and 100 representing job fit compatibility.
-    2. "Matching Skills": A list of skills found in both the resume data and the job description.
-    3. "Missing Skills": Critical requirements from the job description that the candidate lacks.
-    4. "Relevant Experience": A brief sentence summarizing how the candidate's history aligns with this role.
-    5. "Potential Concerns": A list of gaps, missing certifications, or profile anomalies.
-    6. "AI Summary": A clear 3-sentence overview evaluation of the candidate's background fit.
-    7. "Recommendation": A clear selection action choice (e.g., "Strongly Recommend Interview", "Proceed with Caution", or "Reject").
-
-    --- JOB DESCRIPTION ---
-    {job_description_text}
-
-    --- CANDIDATE RESUME JSON ---
-    {resume_string}
-    """
+    # 5. Build the prompt using MATCHER_PROMPT.format()
+    prompt = MATCHER_PROMPT.format(
+        resume_json=json.dumps(resume_json, indent=2),
+        job_description=job_description_text
+    )
 
     try:
-        # Turn on the Groq engine messenger client connection
-        client = get_groq_client()
-        
-        # Send a request message directly to the remote AI servers
-        completion = client.chat.completions.create(
-            model="qwen-32b",
-            messages=[
-                {"role": "system", "content": "You are a professional hiring matcher that outputs strict, raw JSON objects without conversational text or markdown blocks."},
-                {"role": "user", "content": prompt}
-            ],
-            # 0.0 means the AI stays perfectly accurate, factual, and strictly follows instructions
-            temperature=0.0
-        )
-        
-        # Extract the pure string answer response out of the deep API structure
-        ai_response_text = completion.choices[0].message.content.strip()
-        
-        # Convert the flat string text response into an organized Python data dictionary
-        evaluated_match_data = json.loads(ai_response_text)
-        return evaluated_match_data
-        
-    except json.JSONDecodeError as json_err:
-        # Catch formatting issues safely if the AI accidentally returned extra conversational text
-        print(f"Failed to decode AI response into valid JSON: {json_err}")
-        return {
-            "error": "The AI matching engine response was not in a strict JSON format.",
-            "raw_response": ai_response_text if 'ai_response_text' in locals() else ""
-        }
+        # 6. Send the prompt through call_llm() without creating separate Groq client structures
+        raw_response = call_llm(prompt)
     except Exception as e:
-        # Catch unexpected API connection issues or missing secret key failures safely
-        print(f"Groq Matcher API Error: {str(e)}")
+        logger.error(f"LLM matching service transmission failed: {str(e)}")
         return {
-            "error": f"Unable to run candidate comparison match due to: {str(e)}"
+            "error": "Failed to communicate with matching engine",
+            "raw_response": str(e)
         }
+
+    # 7. Clean the response before parsing JSON block structures
+    cleaned_response = (
+        raw_response
+        .replace("```json", "")
+        .replace("```", "")
+        .strip()
+    )
+
+    # 8. Convert the response into a Python JSON dictionary, catching parsing glitches gracefully
+    try:
+        evaluation_data = json.loads(cleaned_response)
+    except json.JSONDecodeError as json_err:
+        logger.error(f"Failed to parse cleaned LLM response text into valid JSON structure: {json_err}")
+        return {
+            "error": "Invalid JSON returned by matcher",
+            "raw_response": raw_response
+        }
+
+    # 9. Validate Match Score constraints and guarantee integer transformations
+    try:
+        raw_score = evaluation_data.get("Match Score", 0)
+        # Attempt converting floats or numeric strings into real integer definitions
+        score = int(float(raw_score))
+    except (ValueError, TypeError):
+        logger.warning(f"Unable to parse non-numeric match score asset. Resetting value to 0 fallback.")
+        score = 0
+
+    if score < 0:
+        score = 0
+    elif score > 100:
+        score = 100
+
+    evaluation_data["Match Score"] = score
+
+    # 10. Do NOT trust the AI Recommendation: Overwrite and generate accurate recommendation choices manually
+    if score >= 80:
+        evaluation_data["Recommendation"] = "Shortlisted"
+    elif 60 <= score <= 79:
+        evaluation_data["Recommendation"] = "Manual Review"
+    else:
+        evaluation_data["Recommendation"] = "Rejected"
+
+    # 11. Validate all list fields. If null or flat string text types pop out, normalize to array lists
+    list_fields = ["Matching Skills", "Missing Skills", "Potential Concerns"]
+    for field in list_fields:
+        field_val = evaluation_data.get(field)
+        if field_val is None:
+            evaluation_data[field] = []
+        elif isinstance(field_val, str):
+            evaluation_data[field] = [field_val.strip()] if field_val.strip() else []
+        elif not isinstance(field_val, list):
+            evaluation_data[field] = [str(field_val)]
+
+    # 12. Validate string fields. Ensure missing or empty values always return empty strings
+    string_fields = ["Relevant Experience", "AI Summary"]
+    for field in string_fields:
+        field_val = evaluation_data.get(field)
+        if field_val is None:
+            evaluation_data[field] = ""
+        else:
+            evaluation_data[field] = str(field_val).strip()
+
+    return evaluation_data
