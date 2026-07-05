@@ -1,113 +1,97 @@
-# Import the tools we need to read files, handle text patterns, and catch errors
+# Import the tools we need to read files, clean up text, and talk to our AI service
 import os
 import fitz  # This is PyMuPDF, used to open and read PDF files
 import docx  # This is python-docx, used to open and read Microsoft Word files
+import json  # This helps us check if the AI gave us a perfect data structure block
+from services.llm_service import ask_llm
+from prompts.resume_parser_prompt import RESUME_PARSER_PROMPT_TEMPLATE
 
 def extract_text_from_pdf(file_path):
     """
     This function opens a PDF file, goes through it page by page, 
     and extracts all the text inside it.
-    
-    If the file is broken or cannot be opened, it safely catches the error 
-    so our program does not crash.
     """
     text = ""
     try:
-        # Open the PDF file using the PyMuPDF library
         doc = fitz.open(file_path)
-        
-        # Loop through every single page in the PDF document
         for page in doc:
-            # Get the text from the current page and append it to our text string
             text += page.get_text()
-            
-        # Close the document to clean up memory
         doc.close()
-        
     except Exception as e:
-        # If something goes wrong (like a broken file), print the error and return empty text
         print(f"Error reading PDF file {file_path}: {e}")
         return ""
-        
     return text
 
 def extract_text_from_docx(file_path):
     """
     This function opens a DOCX (Word) file, looks at every paragraph line by line, 
     and collects all the text together.
-    
-    If there is an error, it handles it safely.
     """
     text = ""
     try:
-        # Open the Word document using the python-docx library
         doc = docx.Document(file_path)
-        
-        # Loop through all the paragraphs (blocks of text) in the document
         for paragraph in doc.paragraphs:
-            # Add the paragraph text followed by a new line space
             text += paragraph.text + "\n"
-            
     except Exception as e:
-        # If the file won't open, let us know and safely return empty text
         print(f"Error reading DOCX file {file_path}: {e}")
         return ""
-        
     return text
 
 def clean_extracted_text(raw_text):
     """
     This function takes messy text, cleans it up by removing annoying blank lines, 
-    and trims extra spaces off the edges so it's easy for our AI to read.
+    and trims extra spaces off the edges.
     """
-    # Split the big chunk of text into a list of individual lines
     lines = raw_text.splitlines()
-    
-    # Create an empty list where we will store only the good, filled lines
     clean_lines = []
-    
-    # Look at each line one by one
     for line in lines:
-        # .strip() removes any empty spaces from the left and right sides of the line
         stripped_line = line.strip()
-        
-        # Only keep the line if it is NOT empty after stripping spaces
         if stripped_line != "":
             clean_lines.append(stripped_line)
-            
-    # Join all the clean lines back together using a single clear line break
     return "\n".join(clean_lines)
 
-def parse_resume(file_path):
+def parse_resume_to_json(file_path):
     """
-    This is the main brain function! 
-    Give it a file path, and it will automatically figure out if it is a PDF 
-    or a DOCX file, run the correct parser, and return the beautifully cleaned text.
+    This is our smart function! 
+    It reads a document file, extracts the clean text, hands it over to the 
+    Groq AI service with our special prompt, and returns a verified JSON object.
     """
-    # Make sure the file actually exists before we try to open it
+    # 1. Check if the file is real and exists on the disk
     if not os.path.exists(file_path):
-        print(f"Error: The file path '{file_path}' does not exist.")
-        return ""
+        return {"error": "File path does not exist"}
         
-    # Find out what the file extension is (.pdf or .docx) in lowercase letters
+    # 2. Extract the file extension to decide how to read it
     _, file_extension = os.path.splitext(file_path.lower())
-    
     raw_text = ""
     
-    # If it is a PDF file, use our PDF function
     if file_extension == ".pdf":
         raw_text = extract_text_from_pdf(file_path)
-        
-    # If it is a Word file, use our DOCX function
     elif file_extension == ".docx":
         raw_text = extract_text_from_docx(file_path)
-        
-    # If it is an unsupported file type, let the system know
     else:
-        print(f"Unsupported file format: {file_extension}. Only .pdf and .docx are supported.")
-        return ""
+        return {"error": f"Unsupported file type: {file_extension}"}
         
-    # Send our messy raw text to the cleaner function to eliminate blank lines
-    final_clean_text = clean_extracted_text(raw_text)
+    # 3. Clean up the text to remove huge empty gaps
+    clean_text = clean_extracted_text(raw_text)
+    if not clean_text:
+        return {"error": "Could not extract any text from this file"}
+        
+    # 4. Fill our prompt template instructions with the clean text we just read
+    formatted_prompt = RESUME_PARSER_PROMPT_TEMPLATE.format(resume_text=clean_text)
     
-    return final_clean_text
+    # 5. Ask our Groq AI service to extract the details and convert it to JSON formatting
+    ai_raw_response = ask_llm(formatted_prompt)
+    
+    # 6. Verify that the AI gave us true JSON data structure back
+    try:
+        # json.loads converts a plain string block back into a structured Python dictionary
+        parsed_json_data = json.loads(ai_raw_response)
+        return parsed_json_data
+        
+    except Exception as e:
+        # If the AI accidentally added extra non-JSON chit-chat text, return a fallback error record
+        print(f"Failed to decode AI response into valid JSON: {e}")
+        return {
+            "error": "AI response was not in strict JSON format",
+            "raw_response": ai_raw_response
+        }
