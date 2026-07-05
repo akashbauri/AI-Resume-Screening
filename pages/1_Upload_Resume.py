@@ -14,6 +14,7 @@ from services.database import (
     load_candidates,
     candidate_exists,
 )
+from services.experience_calculator import calculate_total_experience
 from services.logger import log_event
 
 # Define the maximum file size allowed: 10 Megabytes
@@ -125,6 +126,11 @@ if analyze_button:
             if not parsed_json_profile or "error" in parsed_json_profile:
                 raise RuntimeError(parsed_json_profile.get("error", "The parsing stage returned empty profiles."))
                 
+            # Calculate total experience
+            total_experience = calculate_total_experience(
+                parsed_json_profile.get("Experience", [])
+            )
+
             # Now validate extracted fields safely
             candidate_email = parsed_json_profile.get("Email", "")
             candidate_phone = parsed_json_profile.get("Phone", "")
@@ -173,12 +179,13 @@ if analyze_button:
             consolidated_candidate_record = {
                 "Candidate ID": candidate_uid,
                 "Candidate Name": parsed_json_profile.get("Candidate Name", "Unknown Applicant"),
-                "Email": parsed_json_profile.get("Email", "N/A"),
-                "Phone": parsed_json_profile.get("Phone", "N/A"),
+                "Email": candidate_email,
+                "Phone": candidate_phone,
                 "Location": parsed_json_profile.get("Location", "N/A"),
                 "Current Role": parsed_json_profile.get("Current Role", "N/A"),
                 "Current Company": parsed_json_profile.get("Current Company", "N/A"),
                 "Experience": normalize_to_list(parsed_json_profile.get("Experience", [])),
+                "Total Experience": total_experience,
                 "Education": normalize_to_list(parsed_json_profile.get("Education", [])),
                 "Technical Skills": normalize_to_list(parsed_json_profile.get("Technical Skills", [])),
                 "Soft Skills": normalize_to_list(parsed_json_profile.get("Soft Skills", [])),
@@ -298,10 +305,13 @@ if st.session_state.pipeline_results is not None:
     with col_info_r:
         st.write(f"**💼 Registered Role Status:** {res['Current Role']}")
         st.write(f"**🏢 Associated Company Office:** {res['Current Company']}")
+        st.write(f"**🧑‍💼 Total Experience:** {res['Total Experience']}")
         st.write(f"**⏱️ Data Pipeline Creation:** `{res['Created Time']}`")
         st.write(f"**📂 Attachment Identifier:** `{res['Resume File']}`")
 
     with st.expander("📝 View Full Extracted Competency Experience, Projects & Academic History details"):
+        st.markdown(f"### 🧑‍💼 Total Experience: {res['Total Experience']}")
+        
         st.markdown("**Employment Record Tracks History:**")
         for exp in res["Experience"]:
             if isinstance(exp, dict):
