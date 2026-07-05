@@ -1,7 +1,7 @@
 # Import the tools we need to handle structured JSON data and logging
 import json
 import logging
-from typing import dict, Any
+from typing import Any
 
 # 3. Import call_llm from services.llm_service
 from services.llm_service import call_llm
