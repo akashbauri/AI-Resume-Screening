@@ -175,6 +175,9 @@ if analyze_button:
             timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             candidate_uid = generate_candidate_id()
             
+            # Extract local context variable for the target requirement assignment
+            job_description_text = job_description_input
+
             # Assemble our standard integrated candidate schema record map
             consolidated_candidate_record = {
                 "Candidate ID": candidate_uid,
@@ -202,7 +205,7 @@ if analyze_button:
                 "Status": auto_status,
                 "Application Status": auto_status,
                 "Resume File": uploaded_file.name,
-                "Job Description": job_description_input,
+                "Job Description": job_description_text.strip() if job_description_text else "",
                 "Created Time": timestamp_now,
                 "Updated Time": timestamp_now
             }
