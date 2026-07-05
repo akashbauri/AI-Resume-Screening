@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 
 # Import our custom backend worker tools matching your architectural separation
-from services.resume_parser import parse_resume as extract_resume_text
+from services.resume_parser import extract_resume_text
 from services.llm_service import parse_resume as parse_resume_with_ai
 from services.matcher import run_resume_match as match_candidate
 from services.database import save_candidate, load_candidates
@@ -131,19 +131,22 @@ if analyze_button:
             status_text.text("💾 Saving Candidate...")
             progress_bar.progress(100)
             
-            # Extract raw parameters or map conditional fallbacks
-            score_val = int(match_results.get("Match Score", 0))
+            # Safe parser implementation for Match Score handling percentage marks and string floats
+            try:
+                score_val = int(float(str(match_results.get("Match Score", 0)).replace("%", "").strip()))
+            except Exception:
+                score_val = 0
             
             # Determine mapping constraints automatically using condition expressions
             if score_val >= 80:
                 auto_status = "Shortlisted"
-                badge_rec = "🟢 Shortlisted"
+                clean_rec = "Shortlisted"
             elif score_val >= 50:
                 auto_status = "Manual Review"
-                badge_rec = "🟡 Manual Review"
+                clean_rec = "Manual Review"
             else:
                 auto_status = "Rejected"
-                badge_rec = "🔴 Rejected"
+                clean_rec = "Rejected"
 
             timestamp_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             candidate_uid = generate_candidate_id()
@@ -156,7 +159,7 @@ if analyze_button:
                 "Phone": parsed_json_profile.get("Phone", "N/A"),
                 "Location": parsed_json_profile.get("Location", "N/A"),
                 "Current Role": parsed_json_profile.get("Current Role", "N/A"),
-                "Company": parsed_json_profile.get("Current Company", "N/A"),
+                "Current Company": parsed_json_profile.get("Current Company", "N/A"),
                 "Experience": normalize_to_list(parsed_json_profile.get("Experience", [])),
                 "Education": normalize_to_list(parsed_json_profile.get("Education", [])),
                 "Technical Skills": normalize_to_list(parsed_json_profile.get("Technical Skills", [])),
@@ -169,8 +172,8 @@ if analyze_button:
                 "Missing Skills": normalize_to_list(match_results.get("Missing Skills", [])),
                 "Relevant Experience": match_results.get("Relevant Experience", "N/A"),
                 "Potential Concerns": normalize_to_list(match_results.get("Potential Concerns", [])),
-                "Summary": match_results.get("AI Summary", ""),
-                "Recommendation": badge_rec,
+                "AI Summary": match_results.get("AI Summary", ""),
+                "Recommendation": clean_rec,
                 "Status": auto_status,
                 "Application Status": auto_status,
                 "Resume File": uploaded_file.name,
@@ -212,13 +215,21 @@ if st.session_state.pipeline_results is not None:
         st.write(f"**Fit Match Score Compatibility:** `{res['Match Score']}%`")
         st.progress(res["Match Score"] / 100.0)
     with col_rec:
-        st.markdown(f"**Hiring Verdict:**\n### {res['Recommendation']}")
+        # Display color indicators dynamically on the UI side
+        ui_badge = res["Recommendation"]
+        if ui_badge == "Shortlisted":
+            ui_badge = "🟢 Shortlisted"
+        elif ui_badge == "Manual Review":
+            ui_badge = "🟡 Manual Review"
+        elif ui_badge == "Rejected":
+            ui_badge = "🔴 Rejected"
+        st.markdown(f"**Hiring Verdict:**\n### {ui_badge}")
         
     # Render structured diagnostic items or color codes cards layouts safely
     st.markdown("#### 🧠 AI Evaluation Summary Overview")
     st.markdown(
         f"""> 📋 **Executive Fit Summary:**
-        > {res['Summary']}"""
+        > {res['AI Summary']}"""
     )
     
     col_g, col_r = st.columns(2)
@@ -227,7 +238,7 @@ if st.session_state.pipeline_results is not None:
         if res["Matching Skills"]:
             st.write(", ".join([f"`{s}`" for s in res["Matching Skills"]]))
         else:
-            st.caption("No matching matching skills found.")
+            st.caption("No matching skills found.")
     with col_r:
         st.markdown("**🔴 Missing Role Priority Requirements:**")
         if res["Missing Skills"]:
@@ -256,7 +267,7 @@ if st.session_state.pipeline_results is not None:
         st.write(f"**📍 Current Location Area:** {res['Location']}")
     with col_info_r:
         st.write(f"**💼 Registered Role Status:** {res['Current Role']}")
-        st.write(f"**🏢 Associated Company Office:** {res['Company']}")
+        st.write(f"**🏢 Associated Company Office:** {res['Current Company']}")
         st.write(f"**⏱️ Data Pipeline Creation:** `{res['Created Time']}`")
         st.write(f"**📂 Attachment Identifier:** `{res['Resume File']}`")
 
@@ -265,7 +276,7 @@ if st.session_state.pipeline_results is not None:
         for exp in res["Experience"]:
             if isinstance(exp, dict):
                 st.markdown(f"- **{exp.get('Job Title', 'N/A')}** at *{exp.get('Company', 'N/A')}* ({exp.get('Duration', 'N/A')})")
-                if exp.get("Responsibilities"): st.caption(exp.get("Responsibilities"))
+                if exp.get("Description"): st.caption(exp.get("Description"))
             else:
                 st.markdown(f"- {exp}")
                 
