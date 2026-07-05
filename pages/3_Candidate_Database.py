@@ -84,7 +84,7 @@ else:
     elif sort_by == "Name (A-Z)":
         filtered_candidates = sorted(filtered_candidates, key=lambda x: str(x.get("Candidate Name", "")).lower())
     elif sort_by == "Newest Additions":
-        # Robust lexical fallback works perfectly assuming standard ISO-like timestamp string serialization (YYYY-MM-DD HH:MM:SS)
+        # Lexical chronological sorting works perfectly since our layout uses the "YYYY-MM-DD HH:MM:SS" format
         filtered_candidates = sorted(filtered_candidates, key=lambda x: str(x.get("Created Time", "")), reverse=True)
 
     st.markdown("---")
