@@ -1,5 +1,6 @@
 # Import our web design components and the updated database service functions
 import streamlit as st
+import pandas as pd
 from services.database import load_candidates, delete_candidate
 
 # Set page configuration layout to wide for a highly scannable grid experience
@@ -98,6 +99,52 @@ else:
         st.metric("Top Fit Score in View", f"{high_score}%")
     with m3:
         st.metric("Total Master Pool Size", len(all_candidates))
+
+    st.markdown("---")
+
+    # =========================================
+    # 📥 EXPORT CANDIDATE DATABASE FEATURE
+    # =========================================
+    st.subheader("📥 Export Candidate Database")
+    
+    # Generate clean flattening logic to handle export transformation operations smoothly
+    export_rows = []
+    for candidate in all_candidates:
+        flat_cand = {}
+        for key, val in candidate.items():
+            if key in ["Technical Skills", "Soft Skills", "Languages", "Certifications", "Matching Skills", "Missing Skills", "Potential Concerns"]:
+                if isinstance(val, list):
+                    flat_cand[key] = ", ".join(str(item) for item in val)
+                else:
+                    flat_cand[key] = str(val) if val else ""
+            elif key in ["Experience", "Education", "Projects"]:
+                if isinstance(val, list):
+                    summaries = []
+                    for item in val:
+                        if isinstance(item, dict):
+                            # Dynamically construct a readable textual presentation structure for complex list properties
+                            item_summary = " - ".join(str(v) for k, v in item.items() if v)
+                            summaries.append(f"[{item_summary}]")
+                        else:
+                            summaries.append(str(item))
+                    flat_cand[key] = ", ".join(summaries)
+                else:
+                    flat_cand[key] = str(val) if val else ""
+            else:
+                flat_cand[key] = val
+        export_rows.append(flat_cand)
+        
+    df_export = pd.DataFrame(export_rows)
+    csv_data = df_export.to_csv(index=False).encode('utf-8')
+    
+    st.download_button(
+        label="⬇ Download Candidate Database (CSV)",
+        data=csv_data,
+        file_name="candidate_database.csv",
+        mime="text/csv"
+    )
+
+    st.markdown("---")
 
     st.markdown("### 📋 Applicant Records Grid Table")
 
