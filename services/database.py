@@ -180,3 +180,18 @@ def update_candidate(email_key, updated_fields):
         return False
         
     return _write_database_records(all_candidates)
+
+def candidate_exists(email: str) -> bool:
+    """
+    Returns True if a candidate with the given email already exists.
+    """
+    if not email:
+        return False
+
+    email = email.strip().lower()
+
+    for candidate in load_candidates():
+        if candidate.get("Email", "").strip().lower() == email:
+            return True
+
+    return False
