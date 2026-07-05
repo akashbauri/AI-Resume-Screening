@@ -1,24 +1,30 @@
-# This is a template variable that holds a big instruction message for our AI brain
-RESUME_PARSER_PROMPT_TEMPLATE = """
-You are an expert AI Resume Parser. Your job is to extract information from the resume text provided below and organize it into a strict, valid JSON format.
+# This is a production-quality template variable that holds explicit instructions for our AI engine.
+# It enforces strict constraints to ensure the output contains only a clean, parseable JSON object.
+RESUME_PARSER_PROMPT_TEMPLATE = """You are an elite automated resume parsing engine. Your single task is to extract information from the provided resume text and organize it into a perfectly formed, valid JSON object matching the exact schema specified below.
 
-Do not include any chat, greetings, or conversational text in your response. 
-Return ONLY the raw JSON object. Ensure keys match this structure perfectly. If information is missing for a key, leave its value as an empty string "" or an empty list [].
+CRITICAL INSTRUCTIONS:
+1. Output ONLY the raw JSON object string. 
+2. NEVER include markdown code blocks (e.g., do NOT wrap the response in ```json or ```).
+3. NEVER include introductory, explanatory, or concluding text, conversational pleasantries, or warnings.
+4. Every key defined in the schema MUST exist in your output. If a piece of information is completely missing from the resume, leave its value as an empty string "" or an empty array [] as appropriate.
+5. Clean, sanitize, and format strings (e.g., normalize phone numbers, ensure emails are lowercase).
 
-The JSON structure MUST look exactly like this:
+JSON SCHEMA TO FOLLOW EXACTLY:
 {{
     "Candidate Name": "",
     "Email": "",
     "Phone": "",
+    "Location": "",
     "Experience": [
         {{
             "Job Title": "",
             "Company": "",
             "Duration": "",
-            "Description": ""
+            "Responsibilities": ""
         }}
     ],
-    "Company": "",
+    "Current Role": "",
+    "Current Company": "",
     "Education": [
         {{
             "Degree": "",
@@ -26,15 +32,21 @@ The JSON structure MUST look exactly like this:
             "Year": ""
         }}
     ],
-    "Skills": [],
-    "Projects": [],
+    "Technical Skills": [],
+    "Soft Skills": [],
     "Languages": [],
+    "Projects": [
+        {{
+            "Project Name": "",
+            "Description": "",
+            "Technologies Used": []
+        }}
+    ],
     "Certifications": [],
     "LinkedIn": ""
 }}
 
-Here is the resume text to extract information from:
+RESUME TEXT TO PROCESS:
 ---
 {resume_text}
----
-"""
+---"""
