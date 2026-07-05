@@ -1,42 +1,96 @@
-# Import the tools we need to process data and talk to our AI service
+# Import the official Groq tool to communicate with the AI servers
+from groq import Groq
+# Import streamlit to securely read the API key from Streamlit Cloud Secrets
+import streamlit as st
 import json
-from services.llm_service import ask_llm
-from prompts.matcher_prompt import MATCHER_PROMPT_TEMPLATE
 
-def run_resume_match(resume_text, job_description_text):
+def get_groq_client():
     """
-    This function takes two pieces of clean text: the candidate's resume 
-    and the job description requirements.
-    
-    It combines them into our custom matching prompt, sends it to the AI brain, 
-    and outputs a beautiful python dictionary containing the final scores and breakdowns.
+    This function initializes and returns the Groq client.
+    It fetches the secret key safely from Streamlit Secrets.
     """
+    if "GROQ_API_KEY" not in st.secrets:
+        raise ValueError("Missing GROQ_API_KEY! Please add it to your Streamlit App Secrets.")
+    return Groq(api_key=st.secrets["GROQ_API_KEY"])
+
+def run_resume_match(resume_json, job_description_text):
+    """
+    This function takes parsed resume JSON data and compares it against 
+    the raw Job Description text using the Groq AI engine.
     
-    # 1. Sanity Check: Make sure both inputs actually have text inside them
-    if not resume_text.strip() or not job_description_text.strip():
-        return {
-            "error": "Cannot perform match because either the resume or job description text is empty."
-        }
-        
-    # 2. Fill our prompt template instructions with the actual text items we want to compare
-    formatted_matcher_prompt = MATCHER_PROMPT_TEMPLATE.format(
-        resume_text=resume_text,
-        job_description_text=job_description_text
-    )
+    It outputs a beautifully structured Python dictionary with scores, skills gap breakdown, 
+    and evaluation metrics without returning any markdown formatting.
+    """
+    # Convert the incoming resume JSON dictionary into a clean text string for the prompt
+    resume_string = json.dumps(resume_json, indent=2)
+
+    # Define the precise instructions telling the AI to calculate the match details
+    prompt = f"""
+    You are an expert technical recruiter. Compare the candidate's structured Resume JSON against the provided Job Description (JD).
+    Analyze both profiles and generate a detailed matching assessment matching the exact JSON schema below.
     
-    # 3. Request our Groq AI service to compare both profiles and output a JSON string answer
-    ai_raw_match_response = ask_llm(formatted_matcher_prompt)
-    
-    # 4. Attempt to verify and decode the AI's answer text into a true structured Python data dictionary
+    Do not include any chat, greetings, explanation, or markdown code block formatting (such as ```json). 
+    Return ONLY the raw JSON object string.
+
+    The JSON structure MUST look exactly like this:
+    {{
+        "Match Score": 0,
+        "Matching Skills": [],
+        "Missing Skills": [],
+        "Relevant Experience": "",
+        "Potential Concerns": [],
+        "AI Summary": "",
+        "Recommendation": ""
+    }}
+
+    Rules for fields:
+    1. "Match Score": An integer value between 0 and 100 representing job fit compatibility.
+    2. "Matching Skills": A list of skills found in both the resume data and the job description.
+    3. "Missing Skills": Critical requirements from the job description that the candidate lacks.
+    4. "Relevant Experience": A brief sentence summarizing how the candidate's history aligns with this role.
+    5. "Potential Concerns": A list of gaps, missing certifications, or profile anomalies.
+    6. "AI Summary": A clear 3-sentence overview evaluation of the candidate's background fit.
+    7. "Recommendation": A clear selection action choice (e.g., "Strongly Recommend Interview", "Proceed with Caution", or "Reject").
+
+    --- JOB DESCRIPTION ---
+    {job_description_text}
+
+    --- CANDIDATE RESUME JSON ---
+    {resume_string}
+    """
+
     try:
-        # json.loads parses the flat string response back into an organized dictionary
-        evaluated_match_data = json.loads(ai_raw_match_response)
+        # Turn on the Groq engine messenger client connection
+        client = get_groq_client()
+        
+        # Send a request message directly to the remote AI servers
+        completion = client.chat.completions.create(
+            model="qwen-32b",
+            messages=[
+                {"role": "system", "content": "You are a professional hiring matcher that outputs strict, raw JSON objects without conversational text or markdown blocks."},
+                {"role": "user", "content": prompt}
+            ],
+            # 0.0 means the AI stays perfectly accurate, factual, and strictly follows instructions
+            temperature=0.0
+        )
+        
+        # Extract the pure string answer response out of the deep API structure
+        ai_response_text = completion.choices[0].message.content.strip()
+        
+        # Convert the flat string text response into an organized Python data dictionary
+        evaluated_match_data = json.loads(ai_response_text)
         return evaluated_match_data
         
-    except Exception as e:
-        # If the AI engine returned non-JSON text structure by mistake, catch the failure safely
-        print(f"Failed to transform match data into clean JSON format: {e}")
+    except json.JSONDecodeError as json_err:
+        # Catch formatting issues safely if the AI accidentally returned extra conversational text
+        print(f"Failed to decode AI response into valid JSON: {json_err}")
         return {
-            "error": "The AI evaluation engine could not produce a strict JSON output.",
-            "raw_response": ai_raw_match_response
+            "error": "The AI matching engine response was not in a strict JSON format.",
+            "raw_response": ai_response_text if 'ai_response_text' in locals() else ""
+        }
+    except Exception as e:
+        # Catch unexpected API connection issues or missing secret key failures safely
+        print(f"Groq Matcher API Error: {str(e)}")
+        return {
+            "error": f"Unable to run candidate comparison match due to: {str(e)}"
         }
