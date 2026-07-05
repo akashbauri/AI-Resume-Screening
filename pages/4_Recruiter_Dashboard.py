@@ -29,6 +29,14 @@ else:
         except Exception:
             return 0
 
+    # Helper to format lists or strings into clean, professional comma-separated text
+    def format_list_field(field_value):
+        if not field_value:
+            return "N/A"
+        if isinstance(field_value, list):
+            return ", ".join(str(item) for item in field_value)
+        return str(field_value)
+
     # ==========================================
     # 2. GLOBAL ANALYTICS METRICS
     # ==========================================
@@ -111,12 +119,13 @@ else:
             st.write(f"**📞 Contact Number:** {chosen_candidate.get('Phone', 'N/A')}")
             st.write(f"**📍 Current Location:** {chosen_candidate.get('Location', 'N/A')}")
             st.write(f"**💼 Employment:** {chosen_candidate.get('Current Role', 'N/A')} at *{chosen_candidate.get('Current Company', 'N/A')}*")
+            st.write(f"**🧑‍💼 Total Experience:** {chosen_candidate.get('Total Experience', '0 Months')}")
             
             st.markdown("##### 🛠️ Parsed Background Repositories")
-            st.write(f"**💻 Technical Skills:** {chosen_candidate.get('Technical Skills', 'N/A')}")
-            st.write(f"**🧠 Soft Skills:** {chosen_candidate.get('Soft Skills', 'N/A')}")
-            st.write(f"**🌐 Languages:** {chosen_candidate.get('Languages', 'N/A')}")
-            st.write(f"**📜 Certifications:** {chosen_candidate.get('Certifications', 'N/A')}")
+            st.write(f"**💻 Technical Skills:** {format_list_field(chosen_candidate.get('Technical Skills'))}")
+            st.write(f"**🧠 Soft Skills:** {format_list_field(chosen_candidate.get('Soft Skills'))}")
+            st.write(f"**🌐 Languages:** {format_list_field(chosen_candidate.get('Languages'))}")
+            st.write(f"**📜 Certifications:** {format_list_field(chosen_candidate.get('Certifications'))}")
             if chosen_candidate.get("LinkedIn"):
                 st.write(f"**🔗 Professional Network Link:** [{chosen_candidate.get('LinkedIn')}]({chosen_candidate.get('LinkedIn')})")
 
@@ -126,9 +135,9 @@ else:
             
             # Skills Matrix Comparison UI
             st.markdown("##### 🎯 Targeted Requirement Gap Breakdown")
-            st.success(f"**✅ Matching Skills Matrix:** {chosen_candidate.get('Matching Skills', 'None explicitly flagged.')}")
-            st.error(f"**❌ Identified Missing Skills:** {chosen_candidate.get('Missing Skills', 'None explicitly flagged.')}")
-            st.warning(f"**⚠️ Potential Red Flags / Concerns:** {chosen_candidate.get('Potential Concerns', 'No critical standard concerns flagged.')}")
+            st.success(f"**✅ Matching Skills Matrix:** {format_list_field(chosen_candidate.get('Matching Skills'))}")
+            st.error(f"**❌ Identified Missing Skills:** {format_list_field(chosen_candidate.get('Missing Skills'))}")
+            st.warning(f"**⚠️ Potential Red Flags / Concerns:** {format_list_field(chosen_candidate.get('Potential Concerns'))}")
 
         with tab3:
             st.markdown("##### 🖋️ Historical Recruiter Diary Logs:")
@@ -146,6 +155,7 @@ else:
             new_location = st.text_input("Edit Location Area:", value=chosen_candidate.get("Location", ""))
             new_role = st.text_input("Edit Current Role:", value=chosen_candidate.get("Current Role", ""))
             new_company = st.text_input("Edit Current Company:", value=chosen_candidate.get("Current Company", ""))
+            st.write(f"**🧑‍💼 Total Experience:** {chosen_candidate.get('Total Experience', '0 Months')}")
             
             st.markdown("**2. Update Recruitment Review State Status:**")
             # Synchronized Project Workflow States List
@@ -172,7 +182,7 @@ else:
             st.markdown("**3. Append Recruiter Assessment Notes:**")
             new_notes_input = st.text_area("Append evaluation notes entry:", placeholder="Add candidate screening feedback, vetting logs, or interview remarks here...")
             
-            # Submit Actions execution
+            # Submit Actions execution using correct boolean state assignment mapping pattern
             save_button = st.form_submit_button("Save Changes & Status Logs", use_container_width=True)
             
             if save_button:
