@@ -102,18 +102,19 @@ else:
     st.markdown("### 📋 Applicant Records Grid Table")
 
     # Build an interactive data overview frame using structural columns matching requirements
-    header_cols = st.columns([2, 2, 3, 1, 2, 1.5, 1])
+    header_cols = st.columns([2, 2, 3, 1.5, 1, 2, 1.5, 1])
     with header_cols[0]: st.markdown("**Name**")
     with header_cols[1]: st.markdown("**Email**")
     with header_cols[2]: st.markdown("**Current Role / Company**")
-    with header_cols[3]: st.markdown("**Score**")
-    with header_cols[4]: st.markdown("**Recommendation**")
-    with header_cols[5]: st.markdown("**Status**")
-    with header_cols[6]: st.markdown("**Actions**")
+    with header_cols[3]: st.markdown("**Experience**")
+    with header_cols[4]: st.markdown("**Score**")
+    with header_cols[5]: st.markdown("**Recommendation**")
+    with header_cols[6]: st.markdown("**Status**")
+    with header_cols[7]: st.markdown("**Actions**")
 
     # Display candidate block information row-by-row
     for candidate in filtered_candidates:
-        row_cols = st.columns([2, 2, 3, 1, 2, 1.5, 1])
+        row_cols = st.columns([2, 2, 3, 1.5, 1, 2, 1.5, 1])
         
         cand_name = candidate.get("Candidate Name", "Unknown")
         cand_email = candidate.get("Email", "N/A")
@@ -125,6 +126,7 @@ else:
         cand_score = f"{score_val}%"
         cand_rec = candidate.get("Recommendation", "N/A")
         cand_status = candidate.get("Status", "New")
+        cand_experience = candidate.get("Total Experience", "0 Months")
         
         # Format visual badge markers for Recommendations
         if cand_rec == "Shortlisted":
@@ -151,12 +153,13 @@ else:
         with row_cols[0]: st.write(cand_name)
         with row_cols[1]: st.write(cand_email)
         with row_cols[2]: st.write(role_summary)
-        with row_cols[3]: st.write(cand_score)
-        with row_cols[4]: st.write(rec_badge)
-        with row_cols[5]: st.write(status_badge)
+        with row_cols[3]: st.write(cand_experience)
+        with row_cols[4]: st.write(cand_score)
+        with row_cols[5]: st.write(rec_badge)
+        with row_cols[6]: st.write(status_badge)
         
         # Add interactive removal controls hook with defensive confirmation workflows
-        with row_cols[6]:
+        with row_cols[7]:
             if st.button("🗑️", key=f"del_init_{cand_email}"):
                 st.session_state[f"confirm_delete_{cand_email}"] = True
                 
@@ -217,6 +220,7 @@ else:
                 if candidate.get("Candidate ID"):
                     st.markdown(f"**🆔 Candidate Unique Record identifier:** `{candidate.get('Candidate ID')}`")
                 st.markdown(f"**📍 Current Location Area:** {candidate.get('Location', 'N/A')}")
+                st.markdown(f"**🧑‍💼 Total Experience:** {candidate.get('Total Experience', '0 Months')}")
                 st.markdown(f"**⏰ Data Entry Creation Timestamp:** `{candidate.get('Created Time', 'N/A')}`")
                 st.markdown(f"**🔄 Last System Synchronization Marker:** `{candidate.get('Updated Time', 'N/A')}`")
                 if candidate.get("LinkedIn"):
