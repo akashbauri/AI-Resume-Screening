@@ -8,6 +8,7 @@ from datetime import datetime
 from services.resume_parser import extract_resume_text
 from services.llm_service import parse_resume as parse_resume_with_ai
 from services.matcher import run_resume_match as match_candidate
+from services.validator import validate_email, validate_phone
 from services.database import (
     save_candidate,
     load_candidates,
@@ -120,8 +121,21 @@ if analyze_button:
             progress_bar.progress(35)
             parsed_json_profile = parse_resume_with_ai(extracted_plain_text)
             
+            # Check AI parsing first
             if not parsed_json_profile or "error" in parsed_json_profile:
                 raise RuntimeError(parsed_json_profile.get("error", "The parsing stage returned empty profiles."))
+                
+            # Now validate extracted fields safely
+            candidate_email = parsed_json_profile.get("Email", "")
+            candidate_phone = parsed_json_profile.get("Phone", "")
+
+            if not validate_email(candidate_email):
+                st.error("❌ Invalid email detected in resume.")
+                st.stop()
+
+            if not validate_phone(candidate_phone):
+                st.error("❌ Invalid phone number detected in resume.")
+                st.stop()
                 
             # --- STEP 3: COMPARE RESUME ---
             status_text.text("⚡ Matching Resume with Job Description...")
