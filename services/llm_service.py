@@ -11,7 +11,7 @@ from prompts.resume_parser_prompt import RESUME_PARSER_PROMPT
 logger = logging.getLogger(__name__)
 
 # The specific AI model we are required to use
-MODEL_NAME = "qwen/qwen3-32b"
+MODEL_NAME = "llama-3.3-70b-versatile"
 
 def get_groq_client() -> Groq:
     """
@@ -64,8 +64,14 @@ def call_llm(prompt: str) -> str:
                 stream=False
             )
             
-            # Successfully received response, return the content
-            return completion.choices[0].message.content
+            # Successfully received response, return the content with debug logs
+            response = completion.choices[0].message.content
+
+            print("=" * 80)
+            print(response)
+            print("=" * 80)
+
+            return response
             
         except (APITimeoutError, APIConnectionError) as network_err:
             # Handle timeout and connection errors gracefully
@@ -94,50 +100,47 @@ def call_llm(prompt: str) -> str:
 
 def parse_resume(resume_text: str) -> dict:
     """
-    Processes the raw resume text through the AI to extract structured JSON data.
-    
-    Args:
-        resume_text (str): The raw text extracted from the uploaded resume file.
-        
-    Returns:
-        dict: A dictionary containing the parsed candidate information, or an error dictionary.
+    Sends resume text to Groq and returns parsed JSON.
     """
-    # Build the final prompt securely using the imported template
-    prompt = RESUME_PARSER_PROMPT.format(resume_text=resume_text)
-    
+
+    prompt = RESUME_PARSER_PROMPT.format(
+        resume_text=resume_text
+    )
+
     try:
-        # Get the response text from the LLM
         response_text = call_llm(prompt)
-        
+
     except Exception as e:
-        logger.error(f"Failed to extract resume data due to API failure: {str(e)}")
+        logger.error(str(e))
         return {
-            "error": "Failed to communicate with LLM",
-            "raw_response": str(e)
+            "error": str(e)
         }
-        
-    # Clean up the response text before trying to parse the JSON
-    # Remove markdown formatting like ```json and trailing/leading spaces
+
+    logger.info("========== RAW LLM RESPONSE ==========")
+    logger.info(response_text)
+
     cleaned_text = response_text.strip()
-    
-    if cleaned_text.startswith("```json"):
-        cleaned_text = cleaned_text[7:]
-    elif cleaned_text.startswith("```"):
-        cleaned_text = cleaned_text[3:]
-        
-    if cleaned_text.endswith("```"):
-        cleaned_text = cleaned_text[:-3]
-        
+
+    # Remove markdown
+    cleaned_text = cleaned_text.replace("```json", "")
+    cleaned_text = cleaned_text.replace("```", "")
     cleaned_text = cleaned_text.strip()
-    
-    # Try converting the cleaned text into a Python dictionary
+
+    # Find first JSON object
+    start = cleaned_text.find("{")
+    end = cleaned_text.rfind("}")
+
+    if start != -1 and end != -1:
+        cleaned_text = cleaned_text[start:end + 1]
+
     try:
-        parsed_json_data = json.loads(cleaned_text)
-        return parsed_json_data
-        
-    except json.JSONDecodeError as json_err:
-        logger.error(f"Failed to decode LLM response into JSON: {json_err}")
-        # Return the exact error structure required
+        return json.loads(cleaned_text)
+
+    except Exception as e:
+
+        logger.error("JSON ERROR")
+        logger.error(cleaned_text)
+
         return {
             "error": "Invalid JSON returned by LLM",
             "raw_response": response_text
